@@ -14,8 +14,6 @@ import jakarta.persistence.LockModeType;
 @Repository
 public interface CouponRepository extends JpaRepository<CouponEntity, Long> {
     
-    public CouponEntity findByCodeAndActiveTrue(String code);
-
     public CouponEntity findByCodeIgnoreCase(String code);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
