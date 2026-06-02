@@ -1,14 +1,27 @@
 package com.engine.order_engine.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.engine.order_engine.entity.Coupon;
+import com.engine.order_engine.entity.CouponEntity;
+
+import jakarta.persistence.LockModeType;
 
 @Repository
-public interface CouponRepository extends JpaRepository<Coupon, Long> {
+public interface CouponRepository extends JpaRepository<CouponEntity, Long> {
     
-    public Coupon findByCodeAndActiveTrue(String code);
+    public CouponEntity findByCodeAndActiveTrue(String code);
 
-    public Coupon findByCode(String code);
+    public CouponEntity findByCodeIgnoreCase(String code);
+
+    @Modifying
+    @Query("update coupons c " +
+        "set c.quantity = c.quantity - 1 " +
+        "where lower(c.code) = lower(:code) " +
+        "and c.quantity > 0")
+    int consumeCoupon(@Param("code") String code);
 }

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 
 import com.engine.order_engine.api.dto.request.promotion.CreatePromotionRequest;
 import com.engine.order_engine.domain.model.PromotionDetail;
-import com.engine.order_engine.entity.Promotion;
+import com.engine.order_engine.entity.PromotionEntity;
 import com.engine.order_engine.repository.PromotionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -18,12 +18,12 @@ import lombok.RequiredArgsConstructor;
 public class PromotionService {
     private final PromotionRepository promotionRepository;
 
-    public List<Promotion> getListActivePromotions() {
+    public List<PromotionEntity> getListActivePromotions() {
         return this.promotionRepository.findByActiveTrue();
     }
 
-    public Promotion createPromotion(CreatePromotionRequest request) {
-        Promotion promotion = new Promotion();
+    public PromotionEntity createPromotion(CreatePromotionRequest request) {
+        PromotionEntity promotion = new PromotionEntity();
         promotion.setType(request.getType());
         promotion.setActive(request.isActive());
         promotion.setValue(request.getValue());

@@ -17,6 +17,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,7 +25,7 @@ import lombok.Setter;
 @Entity(name = "orders")
 @Getter
 @Setter
-public class Order {
+public class OrderEntity {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -50,5 +51,8 @@ public class Order {
     private Instant updatedAt = Instant.now();
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<OrderItem> items = new ArrayList<>();
+    private List<OrderItemEntity> items = new ArrayList<>();
+
+    @Version
+    private Long version;
 }

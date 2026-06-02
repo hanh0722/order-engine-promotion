@@ -12,6 +12,6 @@ INSERT INTO promotions (type, value, active) VALUES
     ('BUY2_GET1_FREE', 0, TRUE);
 
 -- changeset seed:3
-INSERT INTO coupons (code, discount_amount, active, expiry_date) VALUES
-    ('SUMMER10', 10.00, TRUE, '2099-12-31'),
-    ('SAVE20', 20.00, TRUE, '2099-12-31');
+INSERT INTO coupons (code, discount_amount, active, expiry_date, quantity) VALUES
+    ('SUMMER10', 10.00, TRUE, '2099-12-31', 10),
+    ('SAVE20', 20.00, TRUE, '2099-12-31', 10);

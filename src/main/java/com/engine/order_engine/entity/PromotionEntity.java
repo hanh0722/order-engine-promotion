@@ -13,6 +13,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -20,7 +21,7 @@ import lombok.Setter;
 @Entity(name = "promotions")
 @Getter
 @Setter
-public class Promotion {
+public class PromotionEntity {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -41,4 +42,7 @@ public class Promotion {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt = Instant.now();
+
+    @Version
+    private Long version;
 }

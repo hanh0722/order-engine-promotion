@@ -6,6 +6,8 @@ import java.util.List;
 
 import com.engine.order_engine.domain.customer.CustomerType;
 import com.engine.order_engine.domain.dto.OrderItemRequest;
+import com.engine.order_engine.domain.dto.coupon.Coupon;
+import com.engine.order_engine.domain.dto.promotion.Promotion;
 import com.engine.order_engine.domain.model.PromotionContext;
 import com.engine.order_engine.domain.promotion.PromotionPipeline;
 import com.engine.order_engine.domain.promotion.PromotionType;
@@ -15,8 +17,9 @@ import com.engine.order_engine.domain.promotion.strategy.Buy2Get1Strategy;
 import com.engine.order_engine.domain.promotion.strategy.CouponStrategy;
 import com.engine.order_engine.domain.promotion.strategy.PercentageDiscountStrategy;
 import com.engine.order_engine.domain.promotion.strategy.VipCustomerStrategy;
-import com.engine.order_engine.entity.Coupon;
-import com.engine.order_engine.entity.Promotion;
+import com.engine.order_engine.entity.CouponEntity;
+import com.engine.order_engine.entity.PromotionEntity;
+import com.engine.order_engine.mapper.coupon.CouponMapper;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -35,10 +38,7 @@ public final class PromotionTestFixtures {
     }
 
     public static Promotion promotion(PromotionType type, String value) {
-        Promotion promotion = new Promotion();
-        promotion.setType(type);
-        promotion.setValue(new BigDecimal(value));
-        promotion.setActive(true);
+        Promotion promotion = Promotion.builder().type(type).value(new BigDecimal(value)).active(true).build();
         return promotion;
     }
 
@@ -69,6 +69,7 @@ public final class PromotionTestFixtures {
         when(coupon.getActive()).thenReturn(true);
         when(coupon.getDiscountAmount()).thenReturn(new BigDecimal("10.00"));
         when(coupon.getExpiryDate()).thenReturn(Instant.parse("2099-12-31T23:59:59Z"));
+        when(coupon.getQuantity()).thenReturn(1);
         return coupon;
     }
 

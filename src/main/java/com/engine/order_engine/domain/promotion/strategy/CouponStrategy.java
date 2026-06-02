@@ -4,10 +4,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 
+import com.engine.order_engine.domain.dto.coupon.Coupon;
 import com.engine.order_engine.domain.model.PromotionContext;
 import com.engine.order_engine.domain.model.PromotionDetail;
 import com.engine.order_engine.domain.promotion.PromotionType;
-import com.engine.order_engine.entity.Coupon;
 import com.engine.order_engine.exception.BusinessException;
 
 public class CouponStrategy implements PromotionStrategy {

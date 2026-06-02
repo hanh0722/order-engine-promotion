@@ -6,8 +6,8 @@ import java.util.List;
 
 import com.engine.order_engine.domain.customer.CustomerType;
 import com.engine.order_engine.domain.dto.OrderItemRequest;
-import com.engine.order_engine.entity.Coupon;
-import com.engine.order_engine.entity.Promotion;
+import com.engine.order_engine.domain.dto.coupon.Coupon;
+import com.engine.order_engine.domain.dto.promotion.Promotion;
 
 import lombok.Getter;
 import lombok.Setter;

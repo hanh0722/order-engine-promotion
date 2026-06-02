@@ -3,10 +3,10 @@ package com.engine.order_engine.domain.promotion.chain;
 import java.util.List;
 import java.util.Optional;
 
+import com.engine.order_engine.domain.dto.promotion.Promotion;
 import com.engine.order_engine.domain.model.PromotionContext;
 import com.engine.order_engine.domain.model.PromotionDetail;
 import com.engine.order_engine.domain.promotion.strategy.PromotionStrategy;
-import com.engine.order_engine.entity.Promotion;
 
 public class PromotionStrategyHandler extends PromotionHandler {
 

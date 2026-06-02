@@ -24,13 +24,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.engine.order_engine.api.dto.request.orders.CalculateOrderRequest;
 import com.engine.order_engine.api.dto.response.order.CreateOrderResponse;
 import com.engine.order_engine.domain.customer.CustomerType;
+import com.engine.order_engine.domain.dto.coupon.Coupon;
+import com.engine.order_engine.domain.dto.promotion.Promotion;
 import com.engine.order_engine.domain.promotion.PromotionPipeline;
 import com.engine.order_engine.domain.promotion.PromotionType;
-import com.engine.order_engine.entity.Coupon;
-import com.engine.order_engine.entity.Order;
-import com.engine.order_engine.entity.Promotion;
+import com.engine.order_engine.entity.CouponEntity;
+import com.engine.order_engine.entity.OrderEntity;
+import com.engine.order_engine.entity.PromotionEntity;
 import com.engine.order_engine.exception.BusinessException;
 import com.engine.order_engine.exception.coupon.CouponStatusMessage;
+import com.engine.order_engine.mapper.coupon.CouponMapper;
+import com.engine.order_engine.mapper.promotion.PromotionMapper;
 import com.engine.order_engine.repository.CouponRepository;
 import com.engine.order_engine.repository.OrderRepository;
 import com.engine.order_engine.repository.PromotionRepository;
@@ -50,17 +54,23 @@ class OrderServiceTest {
     private PromotionPipeline promotionPipeline;
     private PromotionService promotionService;
     private OrderService orderService;
+    private CouponMapper couponMapper;
+    private PromotionMapper promotionMapper;
 
     @BeforeEach
     void setUp() {
         promotionPipeline = productionPipeline();
         promotionService = new PromotionService(promotionRepository);
+        couponMapper = new CouponMapper();
+        promotionMapper = new PromotionMapper();
         orderService = new OrderService(
                 promotionPipeline,
                 couponRepository,
                 promotionRepository,
                 promotionService,
-                orderRepository);
+                orderRepository,
+                couponMapper,
+                promotionMapper);
     }
 
     @Test
@@ -84,7 +94,7 @@ class OrderServiceTest {
 
     @Test
     void calculate_throwsWhenCouponNotFound() {
-        when(couponRepository.findByCode("MISSING")).thenReturn(null);
+        when(couponRepository.findByCodeIgnoreCase("MISSING")).thenReturn(null);
 
         CalculateOrderRequest request = new CalculateOrderRequest();
         request.setCustomerType(CustomerType.REGULAR);
@@ -100,9 +110,9 @@ class OrderServiceTest {
 
     @Test
     void calculate_throwsWhenCouponIsInactive() {
-        Coupon inactive = mock(Coupon.class);
+        CouponEntity inactive = mock(CouponEntity.class);
         when(inactive.getActive()).thenReturn(false);
-        when(couponRepository.findByCode("SAVE20")).thenReturn(inactive);
+        when(couponRepository.findByCodeIgnoreCase("SAVE20")).thenReturn(inactive);
 
         CalculateOrderRequest request = new CalculateOrderRequest();
         request.setCustomerType(CustomerType.REGULAR);
@@ -118,10 +128,11 @@ class OrderServiceTest {
 
     @Test
     void calculate_withoutCoupon_skipsCouponDiscount() {
+        Promotion promotion = promotion(PromotionType.PERCENTAGE_DISCOUNT, "10");
         when(promotionRepository.findByActiveTrue()).thenReturn(List.of(
-                promotion(PromotionType.PERCENTAGE_DISCOUNT, "10")));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order order = invocation.getArgument(0);
+                promotionMapper.toEntity(promotion)));
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> {
+            OrderEntity order = invocation.getArgument(0);
             order.setId(1L);
             return order;
         });
@@ -141,8 +152,8 @@ class OrderServiceTest {
 
     @Test
     void createOrder_persistsOrderWithLineItems() {
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order order = invocation.getArgument(0);
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> {
+            OrderEntity order = invocation.getArgument(0);
             order.setId(99L);
             return order;
         });
@@ -151,16 +162,16 @@ class OrderServiceTest {
         request.setCustomerType(CustomerType.VIP);
         request.setItems(List.of(item("A100", "100", 2)));
 
-        Order saved = orderService.createOrder(
+        OrderEntity saved = orderService.createOrder(
                 request,
                 new BigDecimal("200.00"),
                 new BigDecimal("150.00"),
                 new BigDecimal("50.00"));
 
-        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        ArgumentCaptor<OrderEntity> captor = ArgumentCaptor.forClass(OrderEntity.class);
         verify(orderRepository).save(captor.capture());
 
-        Order captured = captor.getValue();
+        OrderEntity captured = captor.getValue();
         assertThat(saved.getId()).isEqualTo(99L);
         assertThat(captured.getSubTotal()).isEqualByComparingTo("200.00");
         assertThat(captured.getFinalPrice()).isEqualByComparingTo("150.00");
@@ -172,13 +183,14 @@ class OrderServiceTest {
 
     private void stubAssignmentExample() {
         Coupon coupon = summer10Coupon();
-        when(couponRepository.findByCode("SUMMER10")).thenReturn(coupon);
+        CouponEntity entity = couponMapper.toEntity(coupon);
+        when(couponRepository.findByCodeIgnoreCase("SUMMER10")).thenReturn(entity);
         when(promotionRepository.findByActiveTrue()).thenReturn(List.of(
-                promotion(PromotionType.PERCENTAGE_DISCOUNT, "10"),
-                promotion(PromotionType.VIP_DISCOUNT, "5"),
-                promotion(PromotionType.BUY2_GET1_FREE, "0")));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
-            Order order = invocation.getArgument(0);
+                promotionMapper.toEntity(promotion(PromotionType.PERCENTAGE_DISCOUNT, "10")),
+                promotionMapper.toEntity(promotion(PromotionType.VIP_DISCOUNT, "5")),
+                promotionMapper.toEntity(promotion(PromotionType.BUY2_GET1_FREE, "0"))));
+        when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> {
+            OrderEntity order = invocation.getArgument(0);
             order.setId(42L);
             return order;
         });

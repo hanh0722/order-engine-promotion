@@ -6,7 +6,9 @@ CREATE TABLE coupons (
     discount_amount NUMERIC(19,2) NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
     code VARCHAR(255) NOT NULL,
-    expiry_date TIMESTAMP NOT NULL
+    expiry_date TIMESTAMP NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
+    quantity INTEGER NOT NULL DEFAULT 0
 );
 
 -- changeset engine:2
@@ -15,6 +17,7 @@ CREATE TABLE products (
     sku VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
     price NUMERIC(19,2) NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -25,6 +28,7 @@ CREATE TABLE promotions (
     type VARCHAR(255) NOT NULL,
     value NUMERIC(19,2) NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -36,6 +40,7 @@ CREATE TABLE orders (
     sub_total NUMERIC(19,2) NOT NULL,
     total_discount NUMERIC(19,2) NOT NULL,
     final_price NUMERIC(19,2) NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -47,6 +52,7 @@ CREATE TABLE order_items (
     sku VARCHAR(255) NOT NULL,
     price NUMERIC(19,2) NOT NULL,
     quantity INTEGER NOT NULL,
+    version BIGINT NOT NULL DEFAULT 0,
 
     CONSTRAINT fk_order_items_order
         FOREIGN KEY (order_id)

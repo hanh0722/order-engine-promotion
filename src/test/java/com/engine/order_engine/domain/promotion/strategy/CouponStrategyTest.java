@@ -15,7 +15,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.engine.order_engine.domain.customer.CustomerType;
-import com.engine.order_engine.entity.Coupon;
+import com.engine.order_engine.domain.dto.coupon.Coupon;
+import com.engine.order_engine.entity.CouponEntity;
 import com.engine.order_engine.exception.BusinessException;
 import com.engine.order_engine.domain.promotion.PromotionType;
 

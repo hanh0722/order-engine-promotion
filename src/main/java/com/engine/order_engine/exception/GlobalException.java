@@ -2,6 +2,7 @@ package com.engine.order_engine.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -26,5 +27,12 @@ public class GlobalException {
         String message = exception.getMessage();
 
         return ResponseEntity.status(status).body(BaseResponse.error(new BaseError(message, null)));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<BaseResponse<?>> handleValidationException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult().getFieldError().getDefaultMessage();
+        return ResponseEntity.status(exception.getStatusCode())
+                .body(BaseResponse.error(new BaseError(message, "VALIDATION_ERROR")));
     }
 }

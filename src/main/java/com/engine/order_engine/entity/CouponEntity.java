@@ -9,30 +9,34 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.Getter;
+import lombok.Setter;
 
 @Table
-@Entity(name = "products")
+@Entity(name = "coupons")
 @Getter
-public class Product {
-
+@Setter
+public class CouponEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "sku", nullable = false)
-    private String sku;
+    @Column(name = "discount_amount", nullable = false)
+    private BigDecimal discountAmount;
 
     @Column(nullable = false)
-    private String name;
+    private Boolean active = true;
 
     @Column(nullable = false)
-    private BigDecimal price;
-    
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt = Instant.now();
+    private String code;
 
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt = Instant.now();
+    @Column(nullable = false)
+    private Instant expiryDate;
 
+    @Column(nullable = false)
+    private Integer quantity;
+
+    @Version
+    private Long version;
 }
