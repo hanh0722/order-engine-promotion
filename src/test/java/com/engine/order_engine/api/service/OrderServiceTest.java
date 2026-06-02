@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -94,7 +95,7 @@ class OrderServiceTest {
 
     @Test
     void calculate_throwsWhenCouponNotFound() {
-        when(couponRepository.findByCodeIgnoreCase("MISSING")).thenReturn(null);
+        when(couponRepository.findForUpdate("MISSING")).thenReturn(null);
 
         CalculateOrderRequest request = new CalculateOrderRequest();
         request.setCustomerType(CustomerType.REGULAR);
@@ -112,7 +113,7 @@ class OrderServiceTest {
     void calculate_throwsWhenCouponIsInactive() {
         CouponEntity inactive = mock(CouponEntity.class);
         when(inactive.getActive()).thenReturn(false);
-        when(couponRepository.findByCodeIgnoreCase("SAVE20")).thenReturn(inactive);
+        when(couponRepository.findForUpdate("SAVE20")).thenReturn(inactive);
 
         CalculateOrderRequest request = new CalculateOrderRequest();
         request.setCustomerType(CustomerType.REGULAR);
@@ -182,13 +183,22 @@ class OrderServiceTest {
     }
 
     private void stubAssignmentExample() {
-        Coupon coupon = summer10Coupon();
-        CouponEntity entity = couponMapper.toEntity(coupon);
-        when(couponRepository.findByCodeIgnoreCase("SUMMER10")).thenReturn(entity);
+        CouponEntity entity = mock(CouponEntity.class);
+        when(entity.getActive()).thenReturn(true);
+        when(entity.getQuantity()).thenReturn(10);
+        when(entity.getCode()).thenReturn("SUMMER10");
+        when(entity.getDiscountAmount()).thenReturn(new BigDecimal("10.00"));
+        when(entity.getExpiryDate()).thenReturn(Instant.parse("2099-12-31T23:59:59Z"));
+    
+        when(couponRepository.findForUpdate("SUMMER10"))
+            .thenReturn(entity);
+    
         when(promotionRepository.findByActiveTrue()).thenReturn(List.of(
-                promotionMapper.toEntity(promotion(PromotionType.PERCENTAGE_DISCOUNT, "10")),
-                promotionMapper.toEntity(promotion(PromotionType.VIP_DISCOUNT, "5")),
-                promotionMapper.toEntity(promotion(PromotionType.BUY2_GET1_FREE, "0"))));
+            promotionMapper.toEntity(promotion(PromotionType.PERCENTAGE_DISCOUNT, "10")),
+            promotionMapper.toEntity(promotion(PromotionType.VIP_DISCOUNT, "5")),
+            promotionMapper.toEntity(promotion(PromotionType.BUY2_GET1_FREE, "0"))
+        ));
+    
         when(orderRepository.save(any(OrderEntity.class))).thenAnswer(invocation -> {
             OrderEntity order = invocation.getArgument(0);
             order.setId(42L);

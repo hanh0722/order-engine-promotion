@@ -18,6 +18,10 @@ public interface CouponRepository extends JpaRepository<CouponEntity, Long> {
 
     public CouponEntity findByCodeIgnoreCase(String code);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from coupons c where lower(c.code) = lower(:code)")
+    CouponEntity findForUpdate(@Param("code") String code);
+
     @Modifying
     @Query("update coupons c " +
         "set c.quantity = c.quantity - 1 " +

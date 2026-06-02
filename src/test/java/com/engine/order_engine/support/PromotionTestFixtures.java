@@ -69,7 +69,7 @@ public final class PromotionTestFixtures {
         when(coupon.getActive()).thenReturn(true);
         when(coupon.getDiscountAmount()).thenReturn(new BigDecimal("10.00"));
         when(coupon.getExpiryDate()).thenReturn(Instant.parse("2099-12-31T23:59:59Z"));
-        when(coupon.getQuantity()).thenReturn(1);
+        when(coupon.getQuantity()).thenReturn(2);
         return coupon;
     }
 

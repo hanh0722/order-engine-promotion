@@ -45,7 +45,7 @@ public class OrderService {
         CouponEntity couponEntity;
         // check coupon
         if (couponCode != null) {
-            couponEntity = this.couponRepository.findByCodeIgnoreCase(request.getCouponCode());
+            couponEntity = this.couponRepository.findForUpdate(request.getCouponCode());
             if (couponEntity == null) {
                 throw new BusinessException("Coupon " + couponCode + " is not existed",
                         CouponStatusMessage.COUPON_NOT_FOUND.name());
@@ -54,12 +54,11 @@ public class OrderService {
                 throw new BusinessException("Coupon " + couponCode + " is not valid",
                         CouponStatusMessage.COUPON_INVALID.name());
             }
-            coupon = this.couponMapper.toDomain(couponEntity);
-
-            Integer updated = this.couponRepository.consumeCoupon(couponCode);
-            if(updated == 0) {
+            if(couponEntity.getQuantity() <= 0) {
                 throw new BusinessException("Coupon " + couponCode + " is already used maximum", CouponStatusMessage.COUPON_INVALID.name());
             }
+            coupon = this.couponMapper.toDomain(couponEntity);
+            couponEntity.setQuantity(couponEntity.getQuantity() - 1);
         }
         // Get list active promotions
         List<PromotionEntity> promotions = this.promotionRepository.findByActiveTrue();
