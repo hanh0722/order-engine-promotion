@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 
 import com.engine.order_engine.api.dto.request.promotion.CreatePromotionRequest;
 import com.engine.order_engine.api.dto.response.BaseResponse;
-import com.engine.order_engine.api.service.PromotionService;
+import com.engine.order_engine.api.service.implement.PromotionService;
 import com.engine.order_engine.entity.PromotionEntity;
 
 import jakarta.validation.Valid;

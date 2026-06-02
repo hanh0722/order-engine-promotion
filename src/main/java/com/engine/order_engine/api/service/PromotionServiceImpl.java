@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.engine.order_engine.api.dto.request.promotion.CreatePromotionRequest;
+import com.engine.order_engine.api.service.implement.PromotionService;
 import com.engine.order_engine.domain.model.PromotionDetail;
 import com.engine.order_engine.entity.PromotionEntity;
 import com.engine.order_engine.repository.PromotionRepository;
@@ -15,7 +16,7 @@ import lombok.RequiredArgsConstructor;
 @Service
 // annotation to create constructor
 @RequiredArgsConstructor
-public class PromotionService {
+public class PromotionServiceImpl implements PromotionService {
     private final PromotionRepository promotionRepository;
 
     public List<PromotionEntity> getListActivePromotions() {

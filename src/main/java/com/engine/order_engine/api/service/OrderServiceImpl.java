@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.engine.order_engine.api.dto.request.orders.CalculateOrderRequest;
 import com.engine.order_engine.api.dto.response.order.CreateOrderResponse;
+import com.engine.order_engine.api.service.implement.OrderService;
+import com.engine.order_engine.api.service.implement.PromotionService;
 import com.engine.order_engine.domain.dto.coupon.Coupon;
 import com.engine.order_engine.domain.dto.promotion.Promotion;
 import com.engine.order_engine.domain.model.PromotionContext;
@@ -29,7 +31,7 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class OrderService {
+public class OrderServiceImpl implements OrderService {
     private final PromotionPipeline promotionPipeline;
     private final CouponRepository couponRepository;
     private final PromotionRepository promotionRepository;

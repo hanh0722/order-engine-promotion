@@ -24,6 +24,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.engine.order_engine.api.dto.request.orders.CalculateOrderRequest;
 import com.engine.order_engine.api.dto.response.order.CreateOrderResponse;
+import com.engine.order_engine.api.service.implement.OrderService;
+import com.engine.order_engine.api.service.implement.PromotionService;
 import com.engine.order_engine.domain.customer.CustomerType;
 import com.engine.order_engine.domain.dto.coupon.Coupon;
 import com.engine.order_engine.domain.dto.promotion.Promotion;
@@ -61,10 +63,10 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         promotionPipeline = productionPipeline();
-        promotionService = new PromotionService(promotionRepository);
+        promotionService = new PromotionServiceImpl(promotionRepository);
         couponMapper = new CouponMapper();
         promotionMapper = new PromotionMapper();
-        orderService = new OrderService(
+        orderService = new OrderServiceImpl(
                 promotionPipeline,
                 couponRepository,
                 promotionRepository,

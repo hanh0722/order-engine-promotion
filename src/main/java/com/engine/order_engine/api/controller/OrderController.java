@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import com.engine.order_engine.api.dto.request.orders.CalculateOrderRequest;
 import com.engine.order_engine.api.dto.response.BaseResponse;
 import com.engine.order_engine.api.dto.response.order.CreateOrderResponse;
-import com.engine.order_engine.api.service.OrderService;
+import com.engine.order_engine.api.service.implement.OrderService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

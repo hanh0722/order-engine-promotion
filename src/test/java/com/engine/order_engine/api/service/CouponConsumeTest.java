@@ -20,6 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.engine.order_engine.api.dto.request.orders.CalculateOrderRequest;
+import com.engine.order_engine.api.service.implement.OrderService;
 import com.engine.order_engine.domain.customer.CustomerType;
 import com.engine.order_engine.entity.CouponEntity;
 import com.engine.order_engine.repository.CouponRepository;

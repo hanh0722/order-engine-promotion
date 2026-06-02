@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.engine.order_engine.api.dto.request.promotion.CreatePromotionRequest;
+import com.engine.order_engine.api.service.implement.PromotionService;
 import com.engine.order_engine.domain.model.PromotionDetail;
 import com.engine.order_engine.domain.promotion.PromotionType;
 import com.engine.order_engine.entity.PromotionEntity;
@@ -26,8 +28,12 @@ class PromotionServiceTest {
     @Mock
     private PromotionRepository promotionRepository;
 
-    @InjectMocks
     private PromotionService promotionService;
+
+    @BeforeEach
+    void setUp() {
+        this.promotionService = new PromotionServiceImpl(this.promotionRepository);
+    }
 
     @Test
     void getTotalDiscount_sumsAllPromotionAmounts() {
