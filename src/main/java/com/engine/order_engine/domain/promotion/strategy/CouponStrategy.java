@@ -8,7 +8,7 @@ import com.engine.order_engine.domain.model.PromotionContext;
 import com.engine.order_engine.domain.model.PromotionDetail;
 import com.engine.order_engine.domain.promotion.PromotionType;
 import com.engine.order_engine.entity.Coupon;
-import com.engine.order_engine.exception.GeneralException;
+import com.engine.order_engine.exception.BusinessException;
 
 public class CouponStrategy implements PromotionStrategy {
 
@@ -25,10 +25,10 @@ public class CouponStrategy implements PromotionStrategy {
         }
         Boolean isActiveCoupon = coupon.getActive();
         if(!isActiveCoupon) {
-            throw new GeneralException("Coupon " + coupon + " is not activated");
+            throw new BusinessException("Coupon " + coupon + " is not activated");
         }
         if(coupon.getExpiryDate().isBefore(Instant.now())) {
-            throw new GeneralException("Coupon " + coupon + " is expired");
+            throw new BusinessException("Coupon " + coupon + " is expired");
         }
 
         BigDecimal discountAmount = coupon.getDiscountAmount();

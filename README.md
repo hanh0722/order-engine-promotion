@@ -1,132 +1,178 @@
 # Order Engine — Order Pricing & Promotion Engine
 
-Senior Software Engineer take-home assignment implementation for **Challenge 2: Order Pricing & Promotion Engine**.
+Spring Boot service for **Challenge 2** of the Senior Software Engineer take-home: calculate order totals by applying multiple promotion rules, persist orders, and manage promotions/coupons in PostgreSQL.
 
-A Spring Boot service that calculates order totals by applying multiple promotion rules in sequence. Rules are pluggable (Strategy + Chain of Responsibility), promotions and coupons are stored in PostgreSQL, and schema changes are managed with Liquibase SQL changesets.
+**Tech stack:** Java 17 · Spring Boot 3.5 · Spring Data JPA · PostgreSQL · Liquibase (SQL) · Maven · JUnit 5 · Mockito · Docker Compose
 
 ---
 
-## 1. Challenge choice
+## 1. Which challenge and why
 
 **Challenge 2 — Order Pricing & Promotion Engine**
 
-This challenge maps well to composable business rules: each promotion is an independent policy, new rules can be added without editing existing ones, and the problem naturally fits **Strategy** (one algorithm per rule) and **Chain of Responsibility** (rules applied in order). It also exercises API design, persistence, and clear pricing semantics without distributed locking.
+This option fits a rule-composition problem: each discount is independent, new rules should plug in without changing existing code, and the assignment maps cleanly to **Strategy** (one algorithm per rule) and **Chain of Responsibility** (rules applied in sequence). It still covers REST APIs, persistence, migrations, and tests—without inventory locking, which is the focus of Challenge 1.
 
 ---
 
 ## 2. Architecture overview
 
-The project uses a **layered / hexagonal-style** layout: HTTP adapters at the edge, application services orchestrating use cases, and domain logic that does not depend on Spring or JPA.
+This is a **Spring Boot layered application** (controller → service → repository → database), not strict hexagonal/clean architecture. The interesting part is a **promotion pricing engine** living under `domain.promotion`, which `OrderService` calls after loading data from JPA.
+
+### Layers and dependency direction
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  api/          Controllers, DTOs, application services      │
-├─────────────────────────────────────────────────────────────┤
-│  domain/       Promotion rules, pipeline, domain models     │
-├─────────────────────────────────────────────────────────────┤
-│  entity/       JPA entities                                 │
-│  repository/   Spring Data JPA                              │
-├─────────────────────────────────────────────────────────────┤
-│  infrastructure/   Spring configuration (pipeline wiring)   │
-└─────────────────────────────────────────────────────────────┘
-         │                              │
-         ▼                              ▼
-   PostgreSQL                    Liquibase (SQL)
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Presentation                                                │
+  │  api.controller          api.dto (request/response envelopes)  │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │ calls
+  ┌──────────────────────────────▼──────────────────────────────┐
+  │  Application (Spring @Service)                               │
+  │  api.service — OrderService, PromotionService                │
+  │  • @Transactional boundaries                                 │
+  │  • loads/saves via repositories                              │
+  │  • builds PromotionContext, invokes PromotionPipeline        │
+  └───────┬──────────────────────────────┬──────────────────────┘
+          │                              │
+          │ uses                         │ uses
+          ▼                              ▼
+  ┌───────────────────┐      ┌──────────────────────────────────┐
+  │  Persistence      │      │  Promotion engine (domain.*)      │
+  │  repository       │      │  PromotionPipeline                │
+  │  entity (JPA)     │◄─────│  chain → PromotionStrategy       │
+  └─────────┬─────────┘      │  PromotionContext / Detail       │
+            │                └──────────────────────────────────┘
+            │                          ▲
+            │                          │ reads Coupon, Promotion
+            ▼                          │ (JPA entities passed in)
+  ┌───────────────────┐      ┌─────────┴────────────────────────┐
+  │  PostgreSQL       │      │  Also uses: domain.customer,     │
+  │  (Liquibase)      │      │  domain.dto.OrderItemRequest     │
+  └───────────────────┘      └──────────────────────────────────┘
+
+  Cross-cutting: exception (BusinessException, GlobalException)
+  Bootstrap:     infrastructure.configuration — registers PromotionPipeline @Bean
 ```
 
-| Package | Responsibility |
-|---------|----------------|
-| `api.controller` | REST endpoints (`/api/v1/orders`, `/api/v1/promotions`) |
-| `api.service` | `OrderService`, `PromotionService` — load data, run pipeline, persist orders |
-| `api.dto` | Request/response models and `BaseResponse` envelope |
-| `domain.promotion.strategy` | One class per promotion rule |
-| `domain.promotion.chain` | Chain handlers delegating to strategies |
-| `domain.promotion` | `PromotionPipeline`, `PromotionType` |
-| `domain.model` | `PromotionContext`, `PromotionDetail` — calculation state |
-| `entity` / `repository` | Persistence |
-| `infrastructure.configuration` | Wires the promotion chain at startup |
+**Important:** `domain` is **not** isolated from persistence. `PromotionContext` and several strategies take JPA types (`entity.Coupon`, `entity.Promotion`) directly. Repositories and entities sit beside the promotion engine, not behind ports/adapters.
 
-**Request flow (calculate price)**
+### Two entry points
 
-1. `OrderController` receives `POST /api/v1/orders/calculate`.
-2. `OrderService` validates coupon (if present), loads active promotions from DB, builds `PromotionContext`.
-3. `PromotionPipeline` walks the handler chain; each handler invokes its `PromotionStrategy`.
-4. Discount line items are aggregated; order + line items are persisted.
-5. `CreateOrderResponse` is returned with subtotal, discounts, total discount, and final price.
+| Path | Flow |
+|------|------|
+| **Calculate order** | `OrderController` → `OrderService` → repositories (read coupon/promotions) → `PromotionPipeline` → `PromotionService.getTotalDiscount()` → repository (save order) → `BaseResponse<CreateOrderResponse>` |
+| **Manage promotions** | `PromotionController` → `PromotionService` → `PromotionRepository` (list active / create row). Does not run the pricing pipeline. |
+
+### Package map (what each folder actually does)
+
+| Package | Role |
+|---------|------|
+| `api.controller` | REST mapping, wraps results in `BaseResponse` |
+| `api.service` | Application logic and transactions; **only layer that coordinates DB + pipeline** |
+| `api.dto` | HTTP contracts: `CalculateOrderRequest`, `BaseResponse`, `CreateOrderResponse` |
+| `domain.promotion` | Pricing pipeline: `PromotionPipeline`, `PromotionType`, handler chain, strategies |
+| `domain.model` | In-memory calculation state: `PromotionContext`, `PromotionDetail` |
+| `domain.dto` / `domain.customer` | Shared input types (`OrderItemRequest`, `CustomerType`) used by API requests and `PromotionContext` |
+| `entity` | JPA mappings for `orders`, `promotions`, `coupons`, etc. |
+| `repository` | Spring Data JPA queries |
+| `infrastructure.configuration` | Builds the `PromotionPipeline` bean (plain `new` on strategies, linked handlers) |
+| `exception` | `BusinessException` + `@RestControllerAdvice` for error envelope |
+
+### How the promotion engine is wired
+
+Strategies are **not** Spring beans individually. `PromotionPipelineConfiguration` instantiates them, wraps each in a `PromotionStrategyHandler`, links the chain, and exposes a single `PromotionPipeline` bean. `OrderService` receives that bean via constructor injection.
+
+### Calculate flow (step by step)
+
+1. `OrderController` validates `CalculateOrderRequest` and delegates to `OrderService.calculate()`.
+2. `OrderService` loads coupon (if `couponCode` present) and active `Promotion` rows from the database.
+3. It constructs `PromotionContext` (computes subtotal from line items).
+4. `PromotionPipeline.process(context)` walks the chain: Percentage → Buy2Get1 → Coupon → VIP.
+5. Each strategy returns an optional `PromotionDetail`; `PromotionService.getTotalDiscount()` sums amounts.
+6. `OrderService` maps request items to `Order` / `OrderItem` entities and saves via `OrderRepository`.
+7. Response is built as `CreateOrderResponse` inside `BaseResponse`.
+
+### Design intent
+
+- **Separation for pricing rules:** new discounts = new `PromotionStrategy` + one line in pipeline config; `OrderService` stays thin.
+- **Pragmatic Spring style:** one service class owns the use case; repositories and entities are used directly without a separate domain repository interface layer.
 
 ---
 
-## 3. Design patterns
+## 3. Design patterns (where in code)
 
-### Strategy pattern
+### Strategy
 
-Each promotion rule implements `PromotionStrategy` with a single `apply(PromotionContext)` method.
+Each promotion rule implements `PromotionStrategy`:
 
-| Rule | Class |
-|------|--------|
-| 10% order discount | `domain/promotion/strategy/PercentageDiscountStrategy.java` |
+| Rule | Implementation |
+|------|----------------|
+| Percentage off order | `domain/promotion/strategy/PercentageDiscountStrategy.java` |
 | Buy 2 get 1 free (per SKU) | `domain/promotion/strategy/Buy2Get1Strategy.java` |
-| VIP extra 5% | `domain/promotion/strategy/VipCustomerStrategy.java` |
+| VIP +5% | `domain/promotion/strategy/VipCustomerStrategy.java` |
 | Fixed coupon | `domain/promotion/strategy/CouponStrategy.java` |
 
-Interface: `domain/promotion/strategy/PromotionStrategy.java`
+Contract: `domain/promotion/strategy/PromotionStrategy.java`
 
-Adding a new rule: implement `PromotionStrategy`, register a `PromotionStrategyHandler` in `infrastructure/configuration/PromotionPipelineConfiguration.java` — no changes to existing strategy classes.
+**Add a new rule:** create a strategy class + link a `PromotionStrategyHandler` in `infrastructure/configuration/PromotionPipelineConfiguration.java` without modifying existing strategies.
 
 ### Chain of Responsibility
 
-Handlers are linked in order; each passes control to the next after applying its rule.
+| Component | File |
+|-----------|------|
+| Abstract handler (link + `handle`) | `domain/promotion/chain/PromotionHandler.java` |
+| Adapter (strategy → handler) | `domain/promotion/chain/PromotionStrategyHandler.java` |
+| Pipeline facade | `domain/promotion/PromotionPipeline.java` |
+| Chain order (wired at startup) | `infrastructure/configuration/PromotionPipelineConfiguration.java` |
 
-| Piece | Location |
-|-------|----------|
-| Abstract handler | `domain/promotion/chain/PromotionHandler.java` |
-| Strategy adapter | `domain/promotion/chain/PromotionStrategyHandler.java` |
-| Pipeline entry | `domain/promotion/PromotionPipeline.java` |
-| Chain wiring (order) | `infrastructure/configuration/PromotionPipelineConfiguration.java` |
-
-**Pipeline order:** Percentage → Buy 2 Get 1 → Coupon → VIP
+**Execution order:** `PERCENTAGE_DISCOUNT` → `BUY2_GET1_FREE` → coupon → `VIP_DISCOUNT`
 
 ---
 
 ## 4. SOLID principles (where they show up)
 
-| Principle | Example in this codebase |
-|-----------|---------------------------|
-| **S** — Single responsibility | Each `*Strategy` class owns one discount rule only; `OrderService` orchestrates, it does not encode rule math. |
-| **O** — Open/closed | New promotions via new `PromotionStrategy` + handler link; existing strategies stay unchanged. |
-| **L** — Liskov substitution | Any `PromotionStrategy` can be wrapped by `PromotionStrategyHandler` without breaking the chain. |
-| **I** — Interface segregation | `PromotionStrategy` exposes only `getPromotionType()` and `apply()` — no persistence or HTTP concerns. |
-| **D** — Dependency inversion | `OrderService` depends on `PromotionPipeline` and repositories (abstractions via Spring injection), not concrete strategy classes. |
+| Principle | Where |
+|-----------|--------|
+| **Single responsibility** | Each `*Strategy` implements one discount; `OrderService` orchestrates only; `PromotionService` handles promotion CRUD/summing. |
+| **Open/closed** | New discounts = new strategy + handler link; existing strategy classes unchanged. |
+| **Liskov substitution** | Any `PromotionStrategy` works inside `PromotionStrategyHandler` without special cases. |
+| **Interface segregation** | `PromotionStrategy` only exposes `getPromotionType()` and `apply(PromotionContext)`. |
+| **Dependency inversion** | `OrderService` depends on `PromotionPipeline` and repository interfaces injected by Spring, not on concrete strategy classes. |
 
 ---
 
 ## 5. Database design
 
-Schema is defined in Liquibase **SQL-only** changesets:
+Liquibase **SQL-only** changesets (no XML):
 
-- `src/main/resources/db/changelog/changes/001-create-schema.sql`
-- `src/main/resources/db/changelog/changes/002-seed-data.sql`
+| File | Purpose |
+|------|---------|
+| `src/main/resources/db/changelog/db.changelog-master.yaml` | Master changelog |
+| `src/main/resources/db/changelog/changes/001-create-schema.sql` | Tables + indexes |
+| `src/main/resources/db/changelog/changes/002-seed-data.sql` | Sample products, promotions, coupons |
+
+### Tables
 
 | Table | Purpose |
 |-------|---------|
-| `products` | Catalog SKU, name, unit price (seeded for reference; calculate API accepts prices in the request body). |
-| `promotions` | Configurable rules: `type`, `value`, `active`, timestamps. Types align with `PromotionType` enum. |
-| `coupons` | `code`, fixed `discount_amount`, `active`, `expiry_date`. Unique index on `code`. |
-| `orders` | Persisted calculation: `customer_type`, `sub_total`, `total_discount`, `final_price`. |
-| `order_items` | Line items per order (`sku`, `price`, `quantity`), FK to `orders` with cascade delete. |
+| `products` | SKU, name, price (seeded; calculate API still accepts price in the request body) |
+| `promotions` | `type`, `value`, `active`, timestamps — types match `PromotionType` enum |
+| `coupons` | `code`, `discount_amount`, `active`, `expiry_date` — unique index on `code` |
+| `orders` | `customer_type`, `sub_total`, `total_discount`, `final_price`, timestamps |
+| `order_items` | `order_id`, `sku`, `price`, `quantity` — FK to `orders` with `ON DELETE CASCADE` |
 
-**Decisions**
+### Decisions
 
-- **Numeric(19,2)** for money columns to avoid floating-point errors.
-- **Indexes** on `promotions(active)`, `coupons(code)`, `order_items(order_id)` for common lookups.
-- **Seed data** loads default promotions (`PERCENTAGE_DISCOUNT` 10%, `VIP_DISCOUNT` 5%, `BUY2_GET1_FREE`) and coupons `SUMMER10` / `SAVE20` so the service works out of the box after migrations.
-- **JPA `ddl-auto: validate`** — Hibernate never mutates schema; Liquibase is the single source of truth.
+- **`NUMERIC(19,2)`** for money — avoids floating-point drift.
+- **Indexes** on `promotions(active)`, `coupons(code)`, `order_items(order_id)` / `sku`.
+- **Seed data** — 10% percentage, VIP 5%, Buy2Get1 flag, coupons `SUMMER10` ($10) and `SAVE20` ($20).
+- **`spring.jpa.hibernate.ddl-auto: validate`** — schema owned by Liquibase only.
 
 ---
 
 ## 6. How to run the system
 
-### Option A — Docker Compose (recommended for reviewers)
+### Docker Compose (recommended)
 
 From the repository root:
 
@@ -134,36 +180,32 @@ From the repository root:
 docker compose up --build
 ```
 
-This starts PostgreSQL (with healthcheck) and the Spring Boot app. Liquibase migrations run on first startup. The API is available at **http://localhost:8080**.
+- **PostgreSQL 16** starts first (healthcheck).
+- **App** builds via multi-stage `Dockerfile`, connects with `SPRING_DATASOURCE_*` env vars.
+- Liquibase migrates on startup.
+- API: **http://localhost:8080**
 
-### Option B — Local development
+### Local (without app container)
 
-**Prerequisites:** Java 17, Maven 3.9+, PostgreSQL 16+
-
-1. **Start PostgreSQL** (example with Docker):
+**Prerequisites:** Java 17, Maven, PostgreSQL 16+
 
 ```bash
+# Database only
 docker run -d --name order-engine-db \
   -e POSTGRES_USER=root \
   -e POSTGRES_PASSWORD=password \
   -e POSTGRES_DB=order_engine_db \
   -p 5432:5432 \
   postgres:16
-```
 
-2. **Run the application:**
-
-```bash
 ./mvnw spring-boot:run
 ```
 
-Default datasource settings are in `src/main/resources/application.yml` (`localhost:5432`, database `order_engine_db`, user `root` / `password`).
-
-Liquibase runs migrations on startup.
+Config: `src/main/resources/application.yml` (defaults: `localhost:5432`, db `order_engine_db`, user `root` / `password`). Env vars override the datasource URL for Docker.
 
 ### API examples
 
-**Calculate order price** (assignment example)
+**Calculate** (assignment scenario — subtotal **250**, final **102.50**):
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/orders/calculate \
@@ -178,10 +220,8 @@ curl -s -X POST http://localhost:8080/api/v1/orders/calculate \
   }'
 ```
 
-Expected discount breakdown (subtotal **250**):
-
-| Type | Amount |
-|------|--------|
+| Discount type | Amount |
+|---------------|--------|
 | `PERCENTAGE_DISCOUNT` | 25.00 |
 | `BUY2_GET1_FREE` | 100.00 |
 | `COUPON_SUMMER10` | 10.00 |
@@ -195,7 +235,7 @@ Expected discount breakdown (subtotal **250**):
 curl -s http://localhost:8080/api/v1/promotions
 ```
 
-**Create a promotion**
+**Create promotion**
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/promotions \
@@ -205,96 +245,121 @@ curl -s -X POST http://localhost:8080/api/v1/promotions \
 
 ### Response envelope
 
-Promotion endpoints use the required envelope via `BaseResponse`:
+All endpoints return:
 
 ```json
-{ "data": { ... }, "error": null }
+{
+  "data": { },
+  "error": null
+}
 ```
 
-The calculate endpoint currently returns `CreateOrderResponse` directly; wrapping it in `BaseResponse` for full consistency across all routes is listed under improvements below.
+Errors (e.g. invalid coupon) via `exception/GlobalException.java`:
+
+```json
+{
+  "data": null,
+  "error": {
+    "message": "Coupon MISSING is not existed",
+    "code": "COUPON_NOT_FOUND"
+  }
+}
+```
 
 ---
 
 ## 7. How to run tests
 
+**24 unit tests** — no Spring context; repositories mocked in service tests; real pipeline/strategies in domain tests.
+
 ```bash
 ./mvnw test
 ```
 
-| Test type | Status / intent |
-|-----------|------------------|
-| **Unit tests (service + strategies)** | Assignment expects Mockito-based tests per rule and invalid paths — extend under `src/test/java/.../domain/promotion/strategy/`. |
-| **Integration test (Testcontainers)** | Assignment expects full calculate flow against real PostgreSQL — add under `src/test/java/...` with `@Testcontainers`. |
-| **Smoke** | `OrderEngineApplicationTests` — Spring context load. |
+| Test | Location | Covers |
+|------|----------|--------|
+| `PercentageDiscountStrategyTest` | `domain/promotion/strategy/` | 10% off subtotal |
+| `Buy2Get1StrategyTest` | `domain/promotion/strategy/` | Free units per SKU |
+| `VipCustomerStrategyTest` | `domain/promotion/strategy/` | VIP 5% vs regular |
+| `CouponStrategyTest` | `domain/promotion/strategy/` | Apply / missing / inactive / expired |
+| `PromotionPipelineTest` | `domain/promotion/` | Full chain → 147.50 total discount |
+| `PromotionServiceTest` | `api/service/` | Sum discounts, list/create (mocked repo) |
+| `OrderServiceTest` | `api/service/` | End-to-end calculate, coupon errors (mocked repos) |
+| `PromotionTestFixtures` | `support/` | Shared builders + pipeline factory |
 
-Example (once added):
+Run one class:
 
 ```bash
-./mvnw test -Dtest=PercentageDiscountStrategyTest
-./mvnw test -Dtest=OrderCalculateIntegrationTest
+./mvnw test -Dtest=OrderServiceTest
 ```
+
+**Not yet implemented:** Testcontainers integration test (calculate against real PostgreSQL with seeded promotions).
 
 ---
 
-## 8. Trade-offs and future improvements
+## 8. Trade-offs and improvements
 
 | Area | Current choice | With more time |
 |------|----------------|----------------|
-| **Discount base** | VIP and percentage use **order subtotal**; rules do not stack on a running “price after discounts” total. | Configurable stacking (pre-tax subtotal vs. net-after-each-rule). |
-| **API envelope** | Promotions use `BaseResponse`; calculate does not yet. | Global `@ControllerAdvice` + wrap all endpoints. |
-| **Error codes** | `GeneralException` for invalid coupons; no structured `code` field everywhere. | Map exceptions to `BaseError` with stable codes (`INVALID_COUPON`, etc.). |
-| **Buy 2 Get 1** | `quantity / 2` free units per SKU (integer division). | Align with product catalog prices from DB instead of request-only prices. |
-| **Pipeline `supports()`** | Defined on `PromotionHandler` but chain always invokes `doHandle`. | Gate inactive promotion types explicitly in the chain. |
-| **Tests** | Minimal context smoke test. | Full strategy unit suite + Testcontainers integration per assignment spec. |
-| **Docker** | `docker compose up` runs app + Postgres with healthchecks. | Multi-stage build cache tuning; non-root user already used in image. |
-| **Caching** | Caffeine configured; promotions loaded from DB each request. | Cache active promotions/coupons with TTL. |
+| **Discount stacking** | Percentage and VIP use **original subtotal**; discounts are additive, not applied to a running net. | Configurable stacking policies per rule. |
+| **Buy 2 Get 1** | Always runs in pipeline; does not check `promotions.active` for `BUY2_GET1_FREE`. | Gate via `supports()` + DB flag like percentage. |
+| **Order persistence** | `total_discount` column exists but `createOrder` does not set it on the entity. | Persist all calculated fields; align DB with API response. |
+| **Coupons** | Unlimited reuse; no redemption table. | Single-use / per-customer limits with transactional redemption. |
+| **Prices** | Line prices come from the request, not `products` table. | Resolve SKU → price from catalog with override rules. |
+| **Pipeline `supports()`** | Defined on `PromotionHandler` but chain always calls `doHandle`. | Skip handlers when promotion type inactive in DB. |
+| **Tests** | Strong unit coverage (strategies + services + pipeline). | Testcontainers test for `POST /calculate` against real DB. |
+| **Final price floor** | No guard if discounts exceed subtotal. | Reject or cap at zero with clear error code. |
 
 ---
 
-## 9. What breaks at scale and mitigations
+## 9. What breaks at scale and fixes
 
-| Risk | Why | Mitigation |
-|------|-----|------------|
-| **Synchronous calculate** | Every request loads all active promotions and writes an order row. | Cache promotion catalog; async order persistence or event outbox. |
-| **Rule chain in memory** | Pipeline rebuilt per JVM; order fixed in config. | Externalize rule order; feature flags per tenant. |
-| **DB hot rows** | High write rate on `orders` / `order_items`. | Partition by date; archive; read replicas for reporting. |
-| **Coupon abuse** | No rate limiting or single-use enforcement. | Redemption table with unique `(coupon_id, customer_id)`; idempotency keys on calculate. |
-| **Numeric consistency** | Multiple discounts summed in Java. | Central money service; round once at presentation boundary. |
-| **Single instance** | No distributed concerns today. | Stateless pods behind load balancer; shared Postgres; in-memory or distributed cache for promotions. |
+| Risk | Why it hurts | Mitigation |
+|------|----------------|------------|
+| **DB read per calculate** | Every request loads all active promotions + optional coupon. | Cache promotion catalog (Caffeine already on classpath); TTL + invalidation on admin writes. |
+| **Order write amplification** | Each calculate inserts `orders` + `order_items`. | Async persistence, idempotency keys, or separate “quote” vs “commit” endpoints. |
+| **Coupon races** | Same code usable concurrently without limits. | `coupon_redemptions` + unique constraints or `SELECT FOR UPDATE`. |
+| **Hot `orders` table** | Append-only growth. | Partition by `created_at`, archive to warehouse, read replicas for reporting. |
+| **Fixed pipeline order** | Rule sequence compiled into one JVM bean. | External config / per-tenant rule ordering. |
+| **Stateless scaling** | Service is stateless today (safe for horizontal scale). | Run N replicas behind a load balancer; shared Postgres; optional distributed cache for promotions. |
 
----
-
-## Tech stack
-
-- Java 17
-- Spring Boot 3.5.x
-- Spring Data JPA
-- PostgreSQL
-- Liquibase (SQL changesets)
-- Maven
-- Lombok
-- JUnit 5 (tests)
+**Concurrency note (Challenge 2):** Parallel `calculate` requests are safe for pricing math (per-request `PromotionContext`, stateless strategies). The main gap is **business-level** coupon reuse under load, not shared in-memory mutation.
 
 ---
 
-## Project layout (quick reference)
+## Project layout
 
 ```
-src/main/java/com/engine/order_engine/
-├── api/                    # REST + services + DTOs
-├── domain/                 # Promotion rules & pipeline
-├── entity/                 # JPA entities
-├── repository/             # Spring Data
-├── infrastructure/         # Bean configuration
-└── exception/
-src/main/resources/
-├── application.yml
-└── db/changelog/           # Liquibase SQL
-src/test/java/              # Tests
+order_engine/
+├── Dockerfile
+├── docker-compose.yml
+├── pom.xml
+├── src/main/java/com/engine/order_engine/
+│   ├── OrderEngineApplication.java
+│   ├── api/
+│   │   ├── controller/          # OrderController, PromotionController
+│   │   ├── service/             # OrderService, PromotionService
+│   │   └── dto/
+│   │       ├── request/orders/  # CalculateOrderRequest
+│   │       ├── request/promotion/
+│   │       └── response/        # BaseResponse, BaseError, CreateOrderResponse
+│   ├── domain/
+│   │   ├── customer/            # CustomerType
+│   │   ├── dto/                 # OrderItemRequest
+│   │   ├── model/               # PromotionContext, PromotionDetail
+│   │   └── promotion/
+│   │       ├── chain/           # PromotionHandler, PromotionStrategyHandler
+│   │       └── strategy/        # *Strategy implementations
+│   ├── entity/                  # Order, OrderItem, Promotion, Coupon, Product
+│   ├── repository/
+│   ├── infrastructure/configuration/
+│   └── exception/               # BusinessException, GlobalException
+├── src/main/resources/
+│   ├── application.yml
+│   └── db/changelog/
+└── src/test/java/com/engine/order_engine/
+    ├── api/service/             # OrderServiceTest, PromotionServiceTest
+    ├── domain/promotion/        # PromotionPipelineTest
+    │   └── strategy/            # *StrategyTest
+    └── support/                 # PromotionTestFixtures
 ```
-
----
-
-## License / submission
-
-Push this repository to a **public GitHub** repo and share the link as required by the assignment brief.

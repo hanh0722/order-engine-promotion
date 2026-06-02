@@ -14,7 +14,8 @@ import com.engine.order_engine.entity.Coupon;
 import com.engine.order_engine.entity.Order;
 import com.engine.order_engine.entity.OrderItem;
 import com.engine.order_engine.entity.Promotion;
-import com.engine.order_engine.exception.GeneralException;
+import com.engine.order_engine.exception.BusinessException;
+import com.engine.order_engine.exception.coupon.CouponStatusMessage;
 import com.engine.order_engine.repository.CouponRepository;
 import com.engine.order_engine.repository.OrderRepository;
 import com.engine.order_engine.repository.PromotionRepository;
@@ -36,9 +37,12 @@ public class OrderService {
         String couponCode = request.getCouponCode();
         Coupon coupon = null;
         if (couponCode != null) {
-            coupon = this.couponRepository.findByCodeAndActiveTrue(request.getCouponCode());
+            coupon = this.couponRepository.findByCode(request.getCouponCode());
             if (coupon == null) {
-                throw new GeneralException("Coupon " + couponCode + " is not valid");
+                throw new BusinessException("Coupon " + couponCode + " is not existed", CouponStatusMessage.COUPON_NOT_FOUND.name());
+            }
+            if(!coupon.getActive()) {
+                throw new BusinessException("Coupon " + couponCode + " is not valid", CouponStatusMessage.COUPON_INVALID.name());
             }
         }
         List<Promotion> promotions = this.promotionRepository.findByActiveTrue();

@@ -9,4 +9,6 @@ import com.engine.order_engine.entity.Coupon;
 public interface CouponRepository extends JpaRepository<Coupon, Long> {
     
     public Coupon findByCodeAndActiveTrue(String code);
+
+    public Coupon findByCode(String code);
 }
