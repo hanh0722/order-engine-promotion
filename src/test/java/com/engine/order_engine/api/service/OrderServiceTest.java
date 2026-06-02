@@ -63,9 +63,9 @@ class OrderServiceTest {
     @BeforeEach
     void setUp() {
         promotionPipeline = productionPipeline();
-        promotionService = new PromotionServiceImpl(promotionRepository);
-        couponMapper = new CouponMapper();
         promotionMapper = new PromotionMapper();
+        promotionService = new PromotionServiceImpl(promotionRepository, promotionMapper);
+        couponMapper = new CouponMapper();
         orderService = new OrderServiceImpl(
                 promotionPipeline,
                 couponRepository,

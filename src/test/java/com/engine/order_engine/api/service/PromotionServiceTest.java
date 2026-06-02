@@ -17,9 +17,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.engine.order_engine.api.dto.request.promotion.CreatePromotionRequest;
 import com.engine.order_engine.api.service.implement.PromotionService;
+import com.engine.order_engine.domain.dto.promotion.Promotion;
 import com.engine.order_engine.domain.model.PromotionDetail;
 import com.engine.order_engine.domain.promotion.PromotionType;
 import com.engine.order_engine.entity.PromotionEntity;
+import com.engine.order_engine.mapper.promotion.PromotionMapper;
 import com.engine.order_engine.repository.PromotionRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -29,10 +31,12 @@ class PromotionServiceTest {
     private PromotionRepository promotionRepository;
 
     private PromotionService promotionService;
+    private PromotionMapper promotionMapper;
 
     @BeforeEach
     void setUp() {
-        this.promotionService = new PromotionServiceImpl(this.promotionRepository);
+        this.promotionMapper = new PromotionMapper();
+        this.promotionService = new PromotionServiceImpl(this.promotionRepository, this.promotionMapper);
     }
 
     @Test
@@ -50,7 +54,7 @@ class PromotionServiceTest {
         promotion.setType(PromotionType.PERCENTAGE_DISCOUNT);
         when(promotionRepository.findByActiveTrue()).thenReturn(List.of(promotion));
 
-        assertThat(promotionService.getListActivePromotions()).containsExactly(promotion);
+        assertThat(promotionService.getListActivePromotions()).containsExactly(this.promotionMapper.toDomain(promotion));
     }
 
     @Test
@@ -67,7 +71,7 @@ class PromotionServiceTest {
         saved.setActive(true);
         when(promotionRepository.save(any(PromotionEntity.class))).thenReturn(saved);
 
-        PromotionEntity result = promotionService.createPromotion(request);
+        Promotion result = promotionService.createPromotion(request);
 
         assertThat(result.getType()).isEqualTo(PromotionType.PERCENTAGE_DISCOUNT);
         assertThat(result.getValue()).isEqualByComparingTo("10");

@@ -5,6 +5,7 @@ import java.util.List;
 import com.engine.order_engine.domain.customer.CustomerType;
 import com.engine.order_engine.domain.dto.OrderItemRequest;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,5 +18,6 @@ public class CalculateOrderRequest {
     String couponCode;
 
     @NotEmpty(message = "Items are required")
+    @Valid
     List<OrderItemRequest> items;
 }

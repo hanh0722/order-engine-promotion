@@ -21,18 +21,18 @@ public class GlobalException {
                 .body(BaseResponse.error(new BaseError(exception.getMessage(), exception.getCode())));
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<BaseResponse<?>> handleGeneralException(Exception exception) {
-        HttpStatus status = HttpStatus.BAD_REQUEST;
-        String message = exception.getMessage();
-
-        return ResponseEntity.status(status).body(BaseResponse.error(new BaseError(message, null)));
-    }
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<BaseResponse<?>> handleValidationException(MethodArgumentNotValidException exception) {
         String message = exception.getBindingResult().getFieldError().getDefaultMessage();
         return ResponseEntity.status(exception.getStatusCode())
                 .body(BaseResponse.error(new BaseError(message, "VALIDATION_ERROR")));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<BaseResponse<?>> handleGeneralException(Exception exception) {
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String message = exception.getMessage();
+
+        return ResponseEntity.status(status).body(BaseResponse.error(new BaseError(message, null)));
     }
 }
