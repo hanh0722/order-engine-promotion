@@ -150,7 +150,7 @@ class OrderServiceTest {
         assertThat(response.getTotalDiscount()).isEqualByComparingTo("10.00");
         assertThat(response.getFinalPrice()).isEqualByComparingTo("90.00");
         assertThat(response.getDiscounts()).extracting("discountType")
-                .containsExactlyInAnyOrder("PERCENTAGE_DISCOUNT", "BUY2_GET1_FREE");
+                .containsExactlyInAnyOrder("PERCENTAGE_DISCOUNT");
     }
 
     @Test

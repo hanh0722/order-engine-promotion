@@ -46,8 +46,8 @@ class Buy2Get1StrategyTest {
 
         var result = strategy.apply(promotionContext);
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getAmount()).isEqualByComparingTo("0.00");
+        assertThat(result).isEmpty();
+        // assertThat(result.get().getAmount()).isEqualByComparingTo("0.00");
     }
 
     @Test

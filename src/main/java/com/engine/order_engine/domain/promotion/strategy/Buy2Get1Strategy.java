@@ -27,6 +27,10 @@ public class Buy2Get1Strategy implements PromotionStrategy {
             return item.getPrice().multiply(BigDecimal.valueOf(freeUnit));
         }).reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        if(totalDiscount.equals(BigDecimal.ZERO)) {
+            return Optional.empty();
+        }
+
         String promotionType = type.name();
         PromotionDetail promotion = PromotionDetail.builder().discountType(promotionType).amount(totalDiscount).build();
         context.applyDiscount(promotion);
