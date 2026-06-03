@@ -17,9 +17,7 @@ public abstract class PromotionHandler {
 
     public final List<PromotionDetail> handle(PromotionContext context) {
         List<PromotionDetail> results = new ArrayList<>();
-        if(supports(context)) {
-            doHandle(context).ifPresent(results::add);
-        }
+        doHandle(context).ifPresent(results::add);
         if(next != null) {
             results.addAll(next.handle(context));
         }

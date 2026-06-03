@@ -1,7 +1,7 @@
 databaseChangeLog:
-  - include:
+    - include:
       file: db/changelog/changes/001-create-schema.sql
-  - include:
+    - include:
       file: db/changelog/changes/002-seed-data.sql
-  - include:
+    - include:
       file: db/changelog/changes/003-add-check-constraint.sql

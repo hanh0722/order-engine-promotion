@@ -16,7 +16,7 @@ This option fits a rule-composition problem: each discount is independent, new r
 
 ## 2. Architecture overview
 
-This is a **Spring Boot layered application** (controller → service → mapper → repository → database), not strict hexagonal/clean architecture. The interesting part is a **promotion pricing engine** living under `domain.promotion`, which `OrderService` calls after loading data from JPA.
+This is a **Spring Boot layered application** (controller → service → repository → database), not strict hexagonal/clean architecture. The interesting part is a **promotion pricing engine** living under `domain.promotion`, which `OrderService` calls after loading data from JPA.
 
 ### Layers and dependency direction
 
@@ -31,37 +31,36 @@ This is a **Spring Boot layered application** (controller → service → mapper
   │  api.service — OrderService, PromotionService                │
   │  • @Transactional boundaries                                 │
   │  • loads/saves via repositories                              │
-  │  • maps entity ↔ domain DTO via mapper layer                 │
   │  • builds PromotionContext, invokes PromotionPipeline        │
-  └───────┬──────────────────────┬───────────────┬──────────────┘
-          │                      │               │
-          │ uses                 │ uses          │ uses
-          ▼                      ▼               ▼
-  ┌─────────────────────────┐    ┌───────────────────┐    ┌──────────────────────────────────┐
-  │  Mapper layer           │    │  Persistence      │    │  Promotion engine (domain.*)      │
-  │  mapper.coupon          │    │  repository       │    │  PromotionPipeline                │
-  │  mapper.promotion       │    │  entity (JPA)     │◄───│  chain → PromotionStrategy       │
-  │  (entity ↔ domain DTO)  │    └─────────┬─────────┘    │  PromotionContext / Detail       │
-  └─────────────────────────┘              │              └──────────────────────────────────┘
-                                           │                        ▲
-                                           │                        │ reads Coupon, Promotion
-                                           ▼                        │ (domain DTOs mapped from entities)
-                                  ┌───────────────────┐    ┌─────────┴────────────────────────┐
-                                  │  PostgreSQL       │    │  Also uses: domain.customer,     │
-                                  │  (Liquibase)      │    │  domain.dto.OrderItemRequest     │
-                                  └───────────────────┘    └──────────────────────────────────┘
+  └───────┬──────────────────────────────┬──────────────────────┘
+          │                              │
+          │ uses                         │ uses
+          ▼                              ▼
+  ┌───────────────────┐      ┌──────────────────────────────────┐
+  │  Persistence      │      │  Promotion engine (domain.*)      │
+  │  repository       │      │  PromotionPipeline                │
+  │  entity (JPA)     │◄─────│  chain → PromotionStrategy       │
+  └─────────┬─────────┘      │  PromotionContext / Detail       │
+            │                └──────────────────────────────────┘
+            │                          ▲
+            │                          │ reads Coupon, Promotion
+            ▼                          │ (JPA entities passed in)
+  ┌───────────────────┐      ┌─────────┴────────────────────────┐
+  │  PostgreSQL       │      │  Also uses: domain.customer,     │
+  │  (Liquibase)      │      │  domain.dto.OrderItemRequest     │
+  └───────────────────┘      └──────────────────────────────────┘
 
   Cross-cutting: exception (BusinessException, GlobalException)
   Bootstrap:     infrastructure.configuration — registers PromotionPipeline @Bean
 ```
 
-**Important:** `domain` is **not** isolated behind ports/adapters, but service logic now uses an explicit mapper layer (`CouponMapper`, `PromotionMapper`) so promotion processing receives domain DTOs instead of raw JPA entities.
+**Important:** `domain` is **not** isolated from persistence. `PromotionContext` and several strategies take JPA types (`entity.Coupon`, `entity.Promotion`) directly. Repositories and entities sit beside the promotion engine, not behind ports/adapters.
 
 ### Two entry points
 
 | Path | Flow |
 |------|------|
-| **Calculate order** | `OrderController` → `OrderService` → repositories (read coupon/promotions) → mappers (`CouponMapper` / `PromotionMapper`) → `PromotionPipeline` → `PromotionService.getTotalDiscount()` → repository (save order) → `BaseResponse<CreateOrderResponse>` |
+| **Calculate order** | `OrderController` → `OrderService` → repositories (read coupon/promotions) → `PromotionPipeline` → `PromotionService.getTotalDiscount()` → repository (save order) → `BaseResponse<CreateOrderResponse>` |
 | **Manage promotions** | `PromotionController` → `PromotionService` → `PromotionRepository` (list active / create row). Does not run the pricing pipeline. |
 
 ### Package map (what each folder actually does)
@@ -71,7 +70,6 @@ This is a **Spring Boot layered application** (controller → service → mapper
 | `api.controller` | REST mapping, wraps results in `BaseResponse` |
 | `api.service` | Application logic and transactions; **only layer that coordinates DB + pipeline** |
 | `api.dto` | HTTP contracts: `CalculateOrderRequest`, `BaseResponse`, `CreateOrderResponse` |
-| `mapper` | Maps persistence entities to domain DTOs and back (`CouponMapper`, `PromotionMapper`) |
 | `domain.promotion` | Pricing pipeline: `PromotionPipeline`, `PromotionType`, handler chain, strategies |
 | `domain.model` | In-memory calculation state: `PromotionContext`, `PromotionDetail` |
 | `domain.dto` / `domain.customer` | Shared input types (`OrderItemRequest`, `CustomerType`) used by API requests and `PromotionContext` |
@@ -88,18 +86,16 @@ Strategies are **not** Spring beans individually. `PromotionPipelineConfiguratio
 
 1. `OrderController` validates `CalculateOrderRequest` and delegates to `OrderService.calculate()`.
 2. `OrderService` loads coupon (if `couponCode` present) and active `Promotion` rows from the database.
-3. Mapper layer converts persistence models to domain DTOs (`CouponMapper`, `PromotionMapper`).
-4. It constructs `PromotionContext` (computes subtotal from line items).
-5. `PromotionPipeline.process(context)` walks the chain: Percentage → Buy2Get1 → Coupon → VIP.
-6. Each strategy returns an optional `PromotionDetail`; `PromotionService.getTotalDiscount()` sums amounts.
-7. `OrderService` maps request items to `OrderEntity` / `OrderItemEntity` and saves via `OrderRepository`.
-8. Response is built as `CreateOrderResponse` inside `BaseResponse`.
+3. It constructs `PromotionContext` (computes subtotal from line items).
+4. `PromotionPipeline.process(context)` walks the chain: Percentage → Buy2Get1 → Coupon → VIP.
+5. Each strategy returns an optional `PromotionDetail`; `PromotionService.getTotalDiscount()` sums amounts.
+6. `OrderService` maps request items to `Order` / `OrderItem` entities and saves via `OrderRepository`.
+7. Response is built as `CreateOrderResponse` inside `BaseResponse`.
 
 ### Design intent
 
 - **Separation for pricing rules:** new discounts = new `PromotionStrategy` + one line in pipeline config; `OrderService` stays thin.
-- **Mapper layer pattern:** persistence entities and domain DTOs are translated centrally in `mapper/*` instead of ad-hoc conversion in services/strategies.
-- **Pragmatic Spring style:** one service class owns the use case; repositories are used directly without a separate domain repository interface layer.
+- **Pragmatic Spring style:** one service class owns the use case; repositories and entities are used directly without a separate domain repository interface layer.
 
 ---
 
@@ -354,10 +350,7 @@ order_engine/
 │   │   └── promotion/
 │   │       ├── chain/           # PromotionHandler, PromotionStrategyHandler
 │   │       └── strategy/        # *Strategy implementations
-│   ├── entity/                  # OrderEntity, OrderItemEntity, PromotionEntity, CouponEntity, ProductEntity
-│   ├── mapper/
-│   │   ├── coupon/              # CouponMapper
-│   │   └── promotion/           # PromotionMapper
+│   ├── entity/                  # Order, OrderItem, Promotion, Coupon, Product
 │   ├── repository/
 │   ├── infrastructure/configuration/
 │   └── exception/               # BusinessException, GlobalException
